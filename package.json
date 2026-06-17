@@ -1,0 +1,31 @@
+{
+  "name": "fire-evacuation-optimizer",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "typecheck": "vue-tsc --noEmit",
+    "lint": "oxlint .",
+    "lint:fix": "oxlint --fix .",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check .",
+    "check": "vue-tsc --noEmit && oxlint . && oxfmt --check .",
+    "preview": "vite preview",
+    "workers": "vue-tsc --noEmit && vite build && pnpm dlx  wrangler pages deploy dist --branch master"
+  },
+  "dependencies": {
+    "vue": "^3.5.16",
+    "vue-router": "^4.6.4"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.4",
+    "oxfmt": "^0.53.0",
+    "oxlint": "^1.68.0",
+    "pug": "^3.0.3",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5",
+    "vue-tsc": "^2.2.10"
+  }
+}
