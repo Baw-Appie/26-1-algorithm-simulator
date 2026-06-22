@@ -2,7 +2,7 @@
 section.evolution
   .evolution-head
     div
-      h2 GA 진화 과정
+      h2 {{ evolutionLabel }} 진화 과정
       p {{ current.label }} · {{ activeIndex + 1 }} / {{ history.length }}
     .evolution-score
       b 최적 점수
@@ -65,7 +65,7 @@ section.evolution
         i(:style="{ width: `${loadPercent(exit.id)}%`, background: exit.color }")
       b {{ current.metrics.loads[exit.id] }}명 · {{ loadPercent(exit.id).toFixed(1) }}%
 
-  .score-chart(aria-label="세대별 GA 점수")
+  .score-chart(:aria-label="`세대별 ${evolutionLabel} 점수`")
     button.score-bar(
       v-for="(step, index) in history"
       :key="`${step.generation}-${index}`"
@@ -90,6 +90,7 @@ import { formatMs, formatSeconds } from "../lib/utils";
 import type { Assignment, GAEvolutionStep } from "../lib/types";
 
 const props = defineProps<{
+  label?: string;
   history: GAEvolutionStep[];
   activeIndex: number;
   assignment?: Assignment;
@@ -100,6 +101,7 @@ const props = defineProps<{
 defineEmits<{ copy: [] }>();
 
 const exits = EXIT_ORDER.map((id) => ({ id, ...EXIT_INFO[id] }));
+const evolutionLabel = computed(() => props.label || "GA");
 const current = computed<GAEvolutionStep>(
   () => props.history[props.activeIndex] || props.history[0]!
 );

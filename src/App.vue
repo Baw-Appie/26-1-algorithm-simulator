@@ -19,7 +19,7 @@ import { onBeforeUnmount, watch } from "vue";
 import { RouterLink, RouterView, useRoute } from "vue-router";
 import { useEvacuationOptimizer } from "./composables/useEvacuationOptimizer";
 import { navigationItems } from "./router";
-import type { ResultMode } from "./lib/constants";
+import type { GAEvolutionMode, ResultMode } from "./lib/constants";
 
 const route = useRoute();
 const { copyStatus, showAlgorithmResult, showEvolutionResult, status, stopTimers } =
@@ -29,14 +29,19 @@ const pathModes: Record<string, ResultMode> = {
   "/baseline": "baseline",
   "/sa": "sa"
 };
+const evolutionPathModes: Record<string, GAEvolutionMode> = {
+  "/ga-evolution": "ga",
+  "/earlystop-ga-evolution": "earlystopga"
+};
 
 watch(
   () => route.path,
   (path) => {
     stopTimers();
     copyStatus.value = "";
-    if (path === "/ga-evolution") {
-      showEvolutionResult();
+    const evolutionMode = evolutionPathModes[path];
+    if (evolutionMode) {
+      showEvolutionResult(evolutionMode);
       return;
     }
     const mode = pathModes[path];

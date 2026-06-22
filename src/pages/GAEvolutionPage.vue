@@ -22,7 +22,7 @@ section.ga-page
         )
 
     .buttons
-      button.primary(:disabled="busy" @click="runGAEvolution") GA 진화
+      button.primary(:disabled="busy" @click="run") {{ label }} 진화
 
     .metrics
       .metric
@@ -49,12 +49,13 @@ section.ga-page
     )
     GAEvolutionPanel(
       v-if="evolution"
+      :label="label"
       :history="evolution.history"
       :active-index="evolutionIndex"
       :assignment="evolution.assignment"
       :copy-status="copyStatus"
       :compute-time-ms="evolution.computeTimeMs"
-      @copy="copyEvolutionAssignment"
+      @copy="copy"
     )
     .evolution-empty(v-else)
       strong 대기 중
@@ -65,8 +66,12 @@ import { computed } from "vue";
 import EvacuationCanvas from "../components/EvacuationCanvas.vue";
 import GAEvolutionPanel from "../components/GAEvolutionPanel.vue";
 import { useEvacuationOptimizer } from "../composables/useEvacuationOptimizer";
-import { PEOPLE_RANGE } from "../lib/constants";
+import { EVOLUTION_MODE_LABELS, PEOPLE_RANGE, type GAEvolutionMode } from "../lib/constants";
 import { formatMs, formatSeconds } from "../lib/utils";
+
+const props = defineProps<{
+  mode: GAEvolutionMode;
+}>();
 
 const {
   activeFrame,
@@ -75,12 +80,16 @@ const {
   copyEvolutionAssignment,
   copyStatus,
   current,
-  evolution,
   evolutionIndex,
+  evolutions,
   peopleCount,
   runGAEvolution,
   scenario
 } = useEvacuationOptimizer();
 
+const label = computed(() => EVOLUTION_MODE_LABELS[props.mode]);
+const evolution = computed(() => evolutions[props.mode]);
 const activeStep = computed(() => evolution.value?.history[evolutionIndex.value]);
+const run = () => runGAEvolution(props.mode);
+const copy = () => copyEvolutionAssignment(props.mode);
 </script>

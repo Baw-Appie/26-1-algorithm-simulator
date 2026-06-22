@@ -1,10 +1,17 @@
 import { computed, reactive, ref } from "vue";
-import { runBaseline, runGAIncremental, runSAIncremental } from "../lib/algorithms";
 import {
+  runBaseline,
+  runEarlyStopGAIncremental,
+  runGAIncremental,
+  runSAIncremental
+} from "../lib/algorithms";
+import {
+  EVOLUTION_MODE_LABELS,
   MODE_LABELS,
   PEOPLE_RANGE,
   PLAYBACK_CONFIG,
   SPEED_RANGE,
+  type GAEvolutionMode,
   type ResultMode
 } from "../lib/constants";
 import { clamp } from "../lib/utils";
@@ -23,6 +30,7 @@ import type {
 
 type ResultEntry = OptimizerResult & { mode: ResultMode };
 type ResultsState = Record<ResultMode, ResultEntry | null>;
+type EvolutionState = Record<GAEvolutionMode, GAResult | null>;
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -35,7 +43,7 @@ const results = reactive<ResultsState>({ baseline: null, sa: null });
 const current = ref<CurrentResult | null>(null);
 const frameIndex = ref(0);
 const playing = ref(false);
-const evolution = ref<GAResult | null>(null);
+const evolutions = reactive<EvolutionState>({ ga: null, earlystopga: null });
 const evolutionIndex = ref(0);
 const assignmentText = ref("");
 const copyStatus = ref("");
@@ -96,7 +104,8 @@ function resetScenario() {
   results.baseline = null;
   results.sa = null;
   current.value = null;
-  evolution.value = null;
+  evolutions.ga = null;
+  evolutions.earlystopga = null;
   evolutionIndex.value = 0;
   copyStatus.value = "";
   frameIndex.value = 0;
@@ -155,7 +164,8 @@ function play() {
 async function runAlgorithm(mode: ResultMode) {
   pause();
   busy.value = true;
-  evolution.value = null;
+  evolutions.ga = null;
+  evolutions.earlystopga = null;
   evolutionIndex.value = 0;
   copyStatus.value = "";
   status.value = `${MODE_LABELS[mode]} 계산 중`;
@@ -250,13 +260,13 @@ function testAssignment() {
 }
 
 function makeCurrentFromStep(
-  result: GAResult,
+  mode: GAEvolutionMode,
   step: GAEvolutionStep,
   computeTimeMs: number
 ): CurrentResult {
   const metrics = simulate(scenario.value, step.assignment, { record: true });
   return {
-    label: `GA ${step.label}`,
+    label: `${EVOLUTION_MODE_LABELS[mode]} ${step.label}`,
     mode: "ga",
     assignment: step.assignment,
     metrics,
@@ -265,23 +275,27 @@ function makeCurrentFromStep(
   };
 }
 
-function setEvolutionFrame(result: GAResult, index: number) {
+function setEvolutionFrame(mode: GAEvolutionMode, index: number) {
+  const result = evolutions[mode];
+  if (!result) return;
   const step = result.history[index];
   if (!step) return;
+  const label = EVOLUTION_MODE_LABELS[mode];
   evolutionIndex.value = index;
-  current.value = makeCurrentFromStep(result, step, result.computeTimeMs);
+  current.value = makeCurrentFromStep(mode, step, result.computeTimeMs);
   frameIndex.value = 0;
-  status.value = `GA 진화 ${step.generation}세대: 완료 ${step.metrics.completionTime}초, 최대 혼잡 ${step.metrics.maxCongestion}명`;
+  status.value = `${label} 진화 ${step.generation}세대: 완료 ${step.metrics.completionTime}초, 최대 혼잡 ${step.metrics.maxCongestion}명`;
 }
 
-async function runGAEvolution() {
+async function runGAEvolution(mode: GAEvolutionMode = "ga") {
   stopTimers();
   busy.value = true;
   copyStatus.value = "";
-  status.value = "GA 진화 계산 중";
+  const label = EVOLUTION_MODE_LABELS[mode];
+  status.value = `${label} 진화 계산 중`;
   await delay(PLAYBACK_CONFIG.statusDelayMs);
 
-  evolution.value = null;
+  evolutions[mode] = null;
   evolutionIndex.value = 0;
   current.value = null;
   frameIndex.value = 0;
@@ -289,7 +303,10 @@ async function runGAEvolution() {
   const controller = new AbortController();
   gaAbortController = controller;
 
-  const generator = runGAIncremental(scenario.value, { trackHistory: true });
+  const generator =
+    mode === "earlystopga"
+      ? runEarlyStopGAIncremental(scenario.value, { trackHistory: true })
+      : runGAIncremental(scenario.value, { trackHistory: true });
   let finalResult: GAResult | null = null;
 
   for await (const step of generator) {
@@ -297,14 +314,14 @@ async function runGAEvolution() {
     if (!step.result) continue;
 
     finalResult = step.result;
-    evolution.value = step.result;
+    evolutions[mode] = step.result;
     evolutionIndex.value = step.result.history.length - 1;
 
     const latest = step.result.history[step.result.history.length - 1];
     if (latest) {
-      current.value = makeCurrentFromStep(step.result, latest, step.result.computeTimeMs);
+      current.value = makeCurrentFromStep(mode, latest, step.result.computeTimeMs);
       frameIndex.value = current.value.frames.length - 1;
-      status.value = `GA 진화 ${latest.generation}세대: 완료 ${latest.metrics.completionTime}초, 최대 혼잡 ${latest.metrics.maxCongestion}명`;
+      status.value = `${label} 진화 ${latest.generation}세대: 완료 ${latest.metrics.completionTime}초, 최대 혼잡 ${latest.metrics.maxCongestion}명`;
     }
   }
 
@@ -312,14 +329,14 @@ async function runGAEvolution() {
   gaAbortController = null;
 
   if (finalResult) {
-    evolution.value = finalResult;
+    evolutions[mode] = finalResult;
     evolutionIndex.value = finalResult.history.length - 1;
     const latest = finalResult.history[finalResult.history.length - 1];
     if (latest) {
-      current.value = makeCurrentFromStep(finalResult, latest, finalResult.computeTimeMs);
+      current.value = makeCurrentFromStep(mode, latest, finalResult.computeTimeMs);
       frameIndex.value = current.value.frames.length - 1;
     }
-    status.value = `GA 진화 완료: ${finalResult.history.length}세대`;
+    status.value = `${label} 진화 완료: ${finalResult.history.length}세대`;
   }
 }
 
@@ -334,9 +351,10 @@ async function copyPreset(assignment: Assignment, label = "") {
   }
 }
 
-async function copyEvolutionAssignment() {
-  if (!evolution.value) return;
-  copyStatus.value = (await copyPreset(evolution.value.assignment)) ? "복사됨" : "복사 실패";
+async function copyEvolutionAssignment(mode: GAEvolutionMode = "ga") {
+  const evolution = evolutions[mode];
+  if (!evolution) return;
+  copyStatus.value = (await copyPreset(evolution.assignment)) ? "복사됨" : "복사 실패";
 }
 
 async function copyResultPreset(mode: ResultMode) {
@@ -357,9 +375,10 @@ function showAlgorithmResult(mode: ResultMode) {
   frameIndex.value = 0;
 }
 
-function showEvolutionResult() {
-  if (evolution.value?.history.length) {
-    setEvolutionFrame(evolution.value, evolutionIndex.value);
+function showEvolutionResult(mode: GAEvolutionMode = "ga") {
+  const evolution = evolutions[mode];
+  if (evolution?.history.length) {
+    setEvolutionFrame(mode, Math.min(evolutionIndex.value, evolution.history.length - 1));
     return;
   }
   current.value = null;
@@ -378,8 +397,8 @@ export function useEvacuationOptimizer() {
     copyResultPreset,
     copyStatus,
     current,
-    evolution,
     evolutionIndex,
+    evolutions,
     metricSummary,
     pause,
     peopleCount,

@@ -129,5 +129,11 @@ export const MODE_LABELS = {
   sa: "SA"
 } as const;
 
+export const EVOLUTION_MODE_LABELS = {
+  ga: "GA",
+  earlystopga: "EarlyStop GA"
+} as const;
+
 export type AlgorithmMode = keyof typeof MODE_LABELS;
 export type ResultMode = Exclude<AlgorithmMode, "ga">;
+export type GAEvolutionMode = keyof typeof EVOLUTION_MODE_LABELS;

@@ -4,6 +4,9 @@ import { simulate } from "../simulation";
 import type { Assignment, GAResult, GAEvolutionStep, Scenario, SimulationMetrics } from "../types";
 import { baselineAssignment } from "./baseline";
 
+const EARLY_STOP_DELTA = 3;
+const EARLY_STOP_PATIENCE = 5;
+
 function balancedAssignment(scenario: Scenario): Assignment {
   return scenario.people.map((person, index) => {
     const target = EXIT_ORDER[index % EXIT_ORDER.length];
@@ -75,6 +78,9 @@ export function runGA(scenario: Scenario, options: { trackHistory?: boolean } = 
   let scored = scorePopulation(population);
   rememberGeneration(1, scored);
 
+  let bestScore = scored[0].score;
+  let stagnationCount = 0;
+
   const tournament = (candidates: Array<{ genes: Assignment; score: number }>) => {
     let best = candidates[Math.floor(rng() * candidates.length)];
     for (let i = 0; i < GA_CONFIG.tournamentExtraPicks; i++) {
@@ -106,13 +112,25 @@ export function runGA(scenario: Scenario, options: { trackHistory?: boolean } = 
     population = next;
     scored = scorePopulation(population);
     rememberGeneration(gen, scored);
+
+    const currentBest = scored[0].score;
+    const improvement = bestScore - currentBest;
+
+    if (improvement < EARLY_STOP_DELTA) {
+      stagnationCount++;
+    } else {
+      stagnationCount = 0;
+      bestScore = currentBest;
+    }
+
+    if (stagnationCount >= EARLY_STOP_PATIENCE) break;
   }
 
   const best = scored[0].genes;
   const metrics = evaluate(best);
 
   return {
-    label: "GA",
+    label: "EarlyStop GA",
     mode: "ga",
     assignment: best,
     metrics,
@@ -183,7 +201,7 @@ export async function* runGAIncremental(
     const best = scored[0]?.genes ?? baselineAssignment(scenario);
     const metrics = evaluate(best);
     return {
-      label: "GA",
+      label: "EarlyStop GA",
       mode: "ga",
       assignment: best,
       metrics,
@@ -200,6 +218,9 @@ export async function* runGAIncremental(
   rememberBaseline(base);
   let scored = scorePopulation(population);
   rememberGeneration(1, scored);
+
+  let bestScore = scored[0].score;
+  let stagnationCount = 0;
 
   yield { done: false, result: buildResult() };
   await delay(0);
@@ -236,8 +257,27 @@ export async function* runGAIncremental(
     scored = scorePopulation(population);
     rememberGeneration(gen, scored);
 
+    const currentBest = scored[0].score;
+    const improvement = bestScore - currentBest;
+
+    if (improvement < EARLY_STOP_DELTA) {
+      stagnationCount++;
+    } else {
+      stagnationCount = 0;
+      bestScore = currentBest;
+    }
+
+    if (stagnationCount >= EARLY_STOP_PATIENCE) {
+      const result = buildResult();
+      yield { done: true, result };
+      // eslint-disable-next-line no-await-in-loop
+      await delay(0);
+      return result;
+    }
+
     if (gen % yieldInterval === 0 || gen === GA_CONFIG.generations) {
       yield { done: gen === GA_CONFIG.generations, result: buildResult() };
+      // eslint-disable-next-line no-await-in-loop
       await delay(0);
     }
   }

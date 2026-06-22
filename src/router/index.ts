@@ -16,7 +16,15 @@ const routes = [
     path: "/ga-evolution",
     name: "ga-evolution",
     component: GAEvolutionPage,
+    props: { mode: "ga" },
     meta: { label: "GA 진화" }
+  },
+  {
+    path: "/earlystop-ga-evolution",
+    name: "earlystop-ga-evolution",
+    component: GAEvolutionPage,
+    props: { mode: "earlystopga" },
+    meta: { label: "EarlyStop GA 진화" }
   },
   {
     path: "/sa",
